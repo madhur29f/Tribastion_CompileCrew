@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==4.0.1
+python-multipart
+python-json-logger
+presidio-analyzer
+presidio-anonymizer
+supabase
+python-dotenv
+PyMuPDF
+python-docx
+pandas
+sqlparse
