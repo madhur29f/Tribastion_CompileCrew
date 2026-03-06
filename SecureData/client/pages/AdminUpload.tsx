@@ -65,8 +65,8 @@ export default function AdminUpload() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [sanitizationMethod, setSanitizationMethod] = useState<
-    "masking" | "redaction" | "tokenization"
-  >("masking");
+    "masking" | "redaction" | "tokenization" | "smart"
+  >("smart");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -385,11 +385,27 @@ export default function AdminUpload() {
               <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-accent/10 rounded-full blur-xl group-hover:bg-accent/20 transition-colors" />
               <h3 className="text-sm font-bold text-foreground mb-3 uppercase tracking-wider">Sanitization Method</h3>
               <p className="text-xs text-muted-foreground mb-4 font-medium leading-relaxed">
-                The default processing engine uses <strong className="text-accent">Data Masking</strong> to partially obscure PII while retaining analytic value. Adjust rules in Settings.
+                The default processing engine uses <strong className="text-accent">Smart Sanitization</strong> to redact highly critical data and mask general PII while retaining analytic value. Adjust rules natively.
               </p>
               <div className="flex gap-2">
-                <button className="flex-1 bg-primary text-primary-foreground py-2 text-xs font-bold rounded shadow-md border border-primary">Masking</button>
-                <button className="flex-1 bg-background hover:bg-secondary text-foreground py-2 text-xs font-bold rounded border border-border transition-colors">Redaction</button>
+                <button
+                  onClick={() => setSanitizationMethod('smart')}
+                  className={`flex-1 py-2 text-xs font-bold rounded shadow-md border transition-colors ${sanitizationMethod === 'smart' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-secondary text-foreground border-border'}`}
+                >
+                  Smart
+                </button>
+                <button
+                  onClick={() => setSanitizationMethod('masking')}
+                  className={`flex-1 py-2 text-xs font-bold rounded shadow-md border transition-colors ${sanitizationMethod === 'masking' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-secondary text-foreground border-border'}`}
+                >
+                  Masking
+                </button>
+                <button
+                  onClick={() => setSanitizationMethod('redaction')}
+                  className={`flex-1 py-2 text-xs font-bold rounded shadow-md border transition-colors ${sanitizationMethod === 'redaction' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-secondary text-foreground border-border'}`}
+                >
+                  Redaction
+                </button>
               </div>
             </div>
           </motion.div>
