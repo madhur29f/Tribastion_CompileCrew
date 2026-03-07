@@ -1,123 +1,371 @@
-# SecureData – PII Data Sanitization Platform
+# SecureData – PII Data Sanitization & DPDP Compliance Platform
 
-SecureData is a **privacy-focused data sanitization platform** designed to detect and protect sensitive information in datasets before sharing or processing them. The system automatically identifies **Personally Identifiable Information (PII)** and applies sanitization techniques like **masking, redaction, and tokenization**.
-
-This platform helps organizations **secure sensitive data and maintain compliance with privacy regulations**.
+SecureData is a **privacy-focused data sanitization platform** that detects and protects sensitive information in datasets before sharing or processing. It automatically identifies **Personally Identifiable Information (PII)** and applies **masking, redaction, and tokenization**, with full compliance features for the **Digital Personal Data Protection (DPDP) Act**.
 
 ---
 
-## 🏗 Project Architecture
+## Table of Contents
 
-The project follows a decoupled client-server architecture:
-
-- **Frontend (`/SecureData`)**: A modern, responsive React application built with TypeScript, Vite, Tailwind CSS, and ShadCN UI components. State management and data fetching are efficiently handled using React Query.
-- **Backend (`/backend`)**: A fast, robust REST API built in Python with FastAPI. It uses Microsoft Presidio for advanced PII detection, SQLAlchemy for ORM, and Supabase (PostgreSQL) as its primary database. It also handles advanced file parsing (PDFs, DOCX, etc.).
+1. [Prerequisites](#prerequisites)
+2. [Project Structure](#project-structure)
+3. [Installation & Setup](#installation--setup)
+   - [1. Clone the Repository](#1-clone-the-repository)
+   - [2. Backend Setup (FastAPI)](#2-backend-setup-fastapi)
+   - [3. Frontend Setup (Vite + React)](#3-frontend-setup-vite--react)
+4. [Environment Variables](#environment-variables)
+5. [Running the Application](#running-the-application)
+6. [Demo Credentials](#demo-credentials)
+7. [Key Features](#key-features)
+8. [Supported File Formats](#supported-file-formats)
+9. [Technology Stack](#technology-stack)
+10. [API Overview](#api-overview)
+11. [Troubleshooting](#troubleshooting)
+12. [License](#license)
 
 ---
 
-## ✨ Key Features
+## Prerequisites
+
+Ensure the following are installed on your system before proceeding:
+
+| Tool        | Minimum Version | Download Link                                       |
+| ----------- | --------------- | --------------------------------------------------- |
+| **Python**  | 3.10+           | [python.org](https://www.python.org/downloads/)     |
+| **Node.js** | 18+             | [nodejs.org](https://nodejs.org/)                   |
+| **npm**     | 9+ (bundled)    | Installed with Node.js                              |
+| **Git**     | Any recent      | [git-scm.com](https://git-scm.com/)                |
+
+> **Note:** The backend uses SQLite by default — no external database installation is required. PostgreSQL (via Supabase) is optional.
+
+---
+
+## Project Structure
+
+```
+nirmahackathon/
+├── backend/                  # FastAPI backend (Python)
+│   ├── main.py               # Application entry point
+│   ├── config.py             # Environment configuration
+│   ├── database.py           # Database engine (SQLite / PostgreSQL)
+│   ├── models.py             # SQLAlchemy ORM models
+│   ├── auth.py               # Password hashing & JWT utilities
+│   ├── seed.py               # Seed script for demo users
+│   ├── siem_logger.py        # SIEM-compatible audit logging
+│   ├── requirements.txt      # Python dependencies
+│   ├── .env                  # Backend environment variables
+│   ├── routers/              # API route handlers
+│   │   ├── auth_router.py
+│   │   ├── users_router.py
+│   │   ├── files_router.py
+│   │   ├── logs_router.py
+│   │   └── stats_router.py
+│   └── services/             # Business logic services
+│       ├── pii_engine.py     # PII detection & sanitization engine
+│       ├── virustotal_client.py  # VirusTotal hash-based scanning
+│       └── cdr_service.py    # Content Disarm & Reconstruction
+│
+├── SecureData/               # Vite + React frontend (TypeScript)
+│   ├── index.html            # HTML entry point
+│   ├── package.json          # Node.js dependencies & scripts
+│   ├── vite.config.ts        # Vite dev server config (proxy to backend)
+│   ├── tailwind.config.ts    # Tailwind CSS configuration
+│   ├── tsconfig.json         # TypeScript configuration
+│   ├── .env                  # Frontend environment variables
+│   └── client/               # React source code
+│       ├── App.tsx
+│       ├── pages/            # Page components
+│       ├── components/       # Reusable UI components
+│       └── lib/              # Utilities, API client, auth context
+│
+└── .gitignore
+```
+
+---
+
+## Installation & Setup
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-org/nirmahackathon.git
+cd nirmahackathon
+```
+
+---
+
+### 2. Backend Setup (FastAPI)
+
+#### a) Create a Python virtual environment
+
+**Windows (PowerShell):**
+```powershell
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+**macOS / Linux:**
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+```
+
+#### b) Install Python dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+#### c) Download the spaCy language model
+
+The PII detection engine (Presidio) requires a spaCy NLP model:
+
+```bash
+python -m spacy download en_core_web_lg
+```
+
+#### d) Configure environment variables
+
+Create or verify the `.env` file inside `backend/`:
+
+```env
+# JWT Configuration
+SECRET_KEY=your-secret-key-here
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+
+# File Storage (local directory)
+LOCAL_UPLOAD_DIR=uploads
+
+# VirusTotal API (optional — hash-check only, never uploads files)
+VIRUSTOTAL_API_KEY=your-virustotal-api-key
+
+# Zero-Trust file quarantine directories
+QUARANTINE_DIR=uploads/quarantine
+CLEAN_DIR=uploads/clean
+
+# Supabase PostgreSQL (optional — falls back to SQLite if omitted)
+# SUPABASE_URL=https://your-project.supabase.co
+# SUPABASE_KEY=your-anon-key
+# SUPABASE_DB_URL=postgresql://postgres:password@db.your-project.supabase.co:5432/postgres
+```
+
+> **Tip:** If you omit `SUPABASE_DB_URL`, the backend automatically uses a local SQLite database (`backend/data/securedata.db`) — no additional setup needed.
+
+#### e) Seed demo users
+
+Run the seed script to create default Admin and Standard user accounts:
+
+```bash
+python seed.py
+```
+
+This creates:
+
+| Username   | Email                    | Role     | Password     |
+| ---------- | ------------------------ | -------- | ------------ |
+| `admin1`   | admin@securedata.com     | Admin    | `secure@123` |
+| `john_doe` | john@securedata.com      | Standard | `secure@123` |
+
+---
+
+### 3. Frontend Setup (Vite + React)
+
+#### a) Install Node.js dependencies
+
+Open a **new terminal** (keep the backend terminal open):
+
+```bash
+cd SecureData
+npm install
+```
+
+> **Note:** The project specifies `pnpm` as the package manager. If you have `pnpm` installed, you can use `pnpm install` instead.
+
+#### b) Frontend environment variables
+
+The frontend `.env` file is pre-configured. No changes are typically needed.
+
+The Vite dev server is pre-configured to proxy `/api` requests to `http://localhost:8000` (the backend), so the frontend and backend communicate seamlessly during development.
+
+---
+
+## Running the Application
+
+You need **two terminals** running simultaneously:
+
+### Terminal 1 — Start the Backend
+
+```bash
+cd backend
+.\venv\Scripts\Activate.ps1   # Windows
+# source venv/bin/activate    # macOS/Linux
+
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The backend starts at: **http://localhost:8000**
+
+You should see:
+```
+INFO:     Uvicorn running on http://0.0.0.0:8000
+INFO:     Database tables created/verified successfully.
+INFO:     Storage directory ensured: uploads
+```
+
+### Terminal 2 — Start the Frontend
+
+```bash
+cd SecureData
+npm run dev
+```
+
+The frontend starts at: **http://localhost:8080**
+
+### Open the Application
+
+Navigate to **http://localhost:8080** in your browser.
+
+---
+
+## Demo Credentials
+
+| Role     | Username   | Password     |
+| -------- | ---------- | ------------ |
+| Admin    | `admin1`   | `secure@123` |
+| Standard | `john_doe` | `secure@123` |
+
+> **Note:** Make sure you have run `python seed.py` in the backend directory before logging in.
+
+---
+
+## Key Features
+
+### PII Detection & Sanitization
+- Automated PII detection using Microsoft Presidio NLP engine
+- Supports **masking**, **redaction**, and **tokenization**
+- Side-by-side raw vs. sanitized data comparison viewer
+
+### DPDP Act Compliance
+- **Granular consent management** with cryptographic audit trail (SHA-256 hashed)
+- **Right to be Forgotten** — automated data erasure pipeline with Certificate of Deletion
+- PII risk scoring and data classification tiers
+
+### Zero-Trust File Security
+- **VirusTotal integration** — hash-based file scanning (privacy-first, no file upload)
+- **Content Disarm & Reconstruction (CDR)** for PDF and DOCX files
+- File quarantine and clean workflow
+
+### SIEM-Compatible Audit Logging
+- All actions logged: logins, uploads, downloads, PII detection events
+- Exportable SIEM-compatible audit logs
+- Tamper-proof consent audit trail
 
 ### Role-Based Access Control
-- **Admin**: Full access to system features. Manage users, upload/process files, view raw/sanitized data, monitor audit logs, access system settings.
-- **Standard User**: Upload files for sanitization, view sanitized results, access a personal dashboard.
-
-### Comprehensive File Upload & Processing
-Supports parsing and sanitizing multiple formats: SQL, CSV, JSON, PDF, DOCX, TXT, PNG, JPG (via EasyOCR).
-
-### Intelligent PII Detection & Sanitization
-Detects Email Addresses, Phone Numbers, PAN, SSN, Physical Addresses, etc.
-- **Masking:** Partially hides sensitive information (e.g., `john.doe@email.com` → `j***@email.com`).
-- **Redaction:** Completely removes sensitive data (e.g., `PAN: ABCDE1234F` → `[REDACTED]`).
-- **Tokenization:** Replaces with unique tokens (e.g., `SSN: 123-45-6789` → `TOKEN_A7X9K`).
-
-### Advanced Data Viewer & Analytics
-- Side-by-side comparison of Raw and Sanitized data in text, table, or JSON formats.
-- Comprehensive admin dashboard tracking file uploads, PII metrics, and active users.
-- Full audit logging for security compliance.
+- **Admin**: Full system access, user management, raw data viewing, audit logs
+- **Standard User**: Upload files, view sanitized results, manage consent preferences
 
 ---
 
-## 🛠 Technology Stack
+## Supported File Formats
 
-**Frontend:** React 18, TypeScript, Vite, React Router, React Query, Tailwind CSS, Framer Motion, Shadcn UI
-**Backend:** FastAPI, Uvicorn, SQLAlchemy, Supabase, Presidio, PyMuPDF, python-docx, EasyOCR, JWT, bcrypt
-
----
-
-## 🚀 Running the Project Locally
-
-Follow these steps to get the full application running on your local machine.
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v16 or higher)
-- [Python](https://www.python.org/downloads/) (v3.10 or higher)
-- A Supabase / PostgreSQL database instance
-
-### 1. Backend Setup (FastAPI Server)
-
-1. Open your terminal and navigate to the backend directory:
-   ```bash
-   cd d:/nirma/Tribastion_CompileCrew/backend
-   ```
-2. Create and activate a Python virtual environment (recommended):
-   ```bash
-   # Windows
-   python -m venv venv
-   venv\Scripts\activate
-
-   # macOS/Linux
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-3. Install the required Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Configure your Environment Variables:
-   Create a `.env` file in the `/backend` directory matching the required variables configuration (e.g., `SUPABASE_DB_URL`, `JWT_SECRET`).
-5. Run the backend development server using Uvicorn:
-   ```bash
-   uvicorn main:app --reload
-   ```
-   *The API will be running at `http://localhost:8000` (Visit `http://localhost:8000/docs` to see the interactive API documentation).*
-
-### 2. Frontend Setup (React App)
-
-1. Open a new terminal window and navigate to the frontend directory:
-   ```bash
-   cd d:/nirma/Tribastion_CompileCrew/SecureData
-   ```
-2. Install the necessary Node dependencies using npm (or pnpm/yarn):
-   ```bash
-   npm install
-   ```
-   *(Note: The project is configured with `pnpm` under the hood, but `npm install` works natively).*
-3. Run the Vite development server:
-   ```bash
-   npm run dev
-   ```
-   *The web application will be accessible at `http://localhost:5173`.*
+| Format | Extensions       |
+| ------ | ---------------- |
+| Text   | `.txt`           |
+| CSV    | `.csv`           |
+| JSON   | `.json`          |
+| SQL    | `.sql`           |
+| PDF    | `.pdf`           |
+| Word   | `.docx`          |
+| Images | `.png`, `.jpg`   |
 
 ---
 
-## 🔑 Demo Credentials
+## Technology Stack
 
-Once the server is running and database seed is applied (typically via `backend/seed.py`), you can use the following default access accounts:
+### Backend
+| Component          | Technology                           |
+| ------------------ | ------------------------------------ |
+| Framework          | FastAPI (Python)                     |
+| Database ORM       | SQLAlchemy                           |
+| Database           | SQLite (default) / PostgreSQL        |
+| Authentication     | JWT (python-jose) + bcrypt           |
+| PII Detection      | Microsoft Presidio + spaCy           |
+| PDF Processing     | PyMuPDF (fitz)                       |
+| DOCX Processing    | python-docx                          |
+| Image OCR          | EasyOCR                              |
+| File Scanning      | VirusTotal API (httpx)               |
+| CDR                | pikepdf + Pillow                     |
 
-**Admin:**
-- Username: `admin1`
-- Password: `secure@123`
-
-**Standard User:**
-- Username: `john_doe`
-- Password: `secure@123`
+### Frontend
+| Component          | Technology                           |
+| ------------------ | ------------------------------------ |
+| Framework          | React 18 + TypeScript                |
+| Build Tool         | Vite                                 |
+| Styling            | Tailwind CSS                         |
+| UI Components      | shadcn/ui + Radix UI                 |
+| Icons              | Lucide React                         |
+| Animations         | Framer Motion                        |
+| Routing            | React Router v6                      |
+| Data Fetching      | Axios + React Query                  |
+| Charts             | Recharts                             |
 
 ---
 
-## 🔮 Future Improvements
-- AI-based privacy risk analysis and NLP models for real-time PII detection.
-- File encryption for uploaded enterprise datasets.
-- More robust integration with cloud-native storage like AWS S3 or Azure Blob.
+## API Overview
 
-## 📄 License
-This platform is intended for educational, regulatory compliance, and research-focused software purposes.
+All API endpoints are mounted under `/api`. Key routes:
+
+| Method | Endpoint                     | Description                         |
+| ------ | ---------------------------- | ----------------------------------- |
+| POST   | `/api/auth/login`            | User login (returns JWT)            |
+| POST   | `/api/auth/register`         | User registration                   |
+| GET    | `/api/users/`                | List users (Admin only)             |
+| GET    | `/api/users/me`              | Current user profile                |
+| POST   | `/api/files/upload`          | Upload file for PII processing      |
+| GET    | `/api/files/`                | List uploaded files                 |
+| GET    | `/api/files/{id}/download`   | Download sanitized file             |
+| GET    | `/api/logs/`                 | Audit logs                          |
+| GET    | `/api/stats/`                | Dashboard statistics                |
+| GET    | `/api/users/me/consent`      | Get DPDP consent preferences        |
+| PUT    | `/api/users/me/consent`      | Update consent preferences          |
+| DELETE | `/api/users/me/forget`       | Right to be Forgotten erasure       |
+
+Full interactive API docs are available at **http://localhost:8000/docs** (Swagger UI) when the backend is running.
+
+---
+
+## Troubleshooting
+
+### Backend won't start
+- **`ModuleNotFoundError`**: Make sure your virtual environment is activated and you ran `pip install -r requirements.txt`.
+- **Presidio errors**: Ensure you downloaded the spaCy model: `python -m spacy download en_core_web_lg`.
+- **Port 8000 in use**: Kill the process using port 8000 or change the port: `uvicorn main:app --port 8001`.
+
+### Frontend won't start
+- **`npm install` errors**: Delete `node_modules` and `package-lock.json`, then run `npm install` again.
+- **Port 8080 in use**: Vite will automatically try the next available port.
+
+### Login fails with "Incorrect email or password"
+- Ensure you ran `python seed.py` in the backend directory to create demo users.
+- Verify the backend is running and accessible at `http://localhost:8000/api/ping`.
+
+### API requests return 404 or network errors
+- Ensure both backend (port 8000) and frontend (port 8080) are running simultaneously.
+- The Vite proxy forwards `/api` requests to `http://localhost:8000`. If the backend port changes, update `vite.config.ts`.
+
+### Database reset
+To start fresh, delete the SQLite database and re-seed:
+```bash
+cd backend
+del data\securedata.db    # Windows
+# rm data/securedata.db   # macOS/Linux
+python seed.py
+```
+
+---
+
+## License
+
+This project is intended for **educational and research purposes**.
