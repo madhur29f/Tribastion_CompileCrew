@@ -232,13 +232,24 @@ def get_raw_file(file_id: int, db: Session = Depends(get_db), admin: User = Depe
                 return {"content": text}
         return {"content": text}
 
-    # For binary formats, stream the file
-    content_type = _get_content_type(ext)
-    return StreamingResponse(
-        io.BytesIO(raw_bytes),
-        media_type=content_type,
-        headers={"Content-Disposition": f"inline; filename={file_record.name}"},
-    )
+    # For PDF/DOCX, extract text for display in the viewer
+    if ext == ".pdf":
+        spans = extract_pdf_text_with_positions(raw_bytes)
+        text = "\n".join(s["text"] for s in spans)
+        return {"content": text, "file_type": "pdf"}
+    elif ext == ".docx":
+        from docx import Document as DocxDocument
+        doc = DocxDocument(io.BytesIO(raw_bytes))
+        text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        return {"content": text, "file_type": "docx"}
+    else:
+        # Other binary formats: stream the file
+        content_type = _get_content_type(ext)
+        return StreamingResponse(
+            io.BytesIO(raw_bytes),
+            media_type=content_type,
+            headers={"Content-Disposition": f"inline; filename={file_record.name}"},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -271,12 +282,23 @@ def get_sanitized_file(
                 return {"content": text}
         return {"content": text}
 
-    # For binary formats, stream
-    return StreamingResponse(
-        io.BytesIO(sanitized_bytes),
-        media_type=content_type,
-        headers={"Content-Disposition": f"inline; filename=sanitized_{file_record.name}"},
-    )
+    # For PDF/DOCX, extract text from sanitized output for display
+    if ext == ".pdf":
+        spans = extract_pdf_text_with_positions(sanitized_bytes)
+        text = "\n".join(s["text"] for s in spans)
+        return {"content": text, "file_type": "pdf"}
+    elif ext == ".docx":
+        from docx import Document as DocxDocument
+        doc = DocxDocument(io.BytesIO(sanitized_bytes))
+        text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        return {"content": text, "file_type": "docx"}
+    else:
+        # Other binary formats: stream
+        return StreamingResponse(
+            io.BytesIO(sanitized_bytes),
+            media_type=content_type,
+            headers={"Content-Disposition": f"inline; filename=sanitized_{file_record.name}"},
+        )
 
 
 # ---------------------------------------------------------------------------
