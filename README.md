@@ -43,7 +43,7 @@ Ensure the following are installed on your system before proceeding:
 ## Project Structure
 
 ```
-nirmahackathon/
+Tribastion_CompileCrew/
 ├── backend/                  # FastAPI backend (Python)
 │   ├── main.py               # Application entry point
 │   ├── config.py             # Environment configuration
