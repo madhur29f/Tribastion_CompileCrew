@@ -15,3 +15,5 @@ PyMuPDF
 python-docx
 pandas
 sqlparse
+httpx
+pikepdf

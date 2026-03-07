@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum as SAEnum
+from sqlalchemy import Column, Integer, String, DateTime, Enum as SAEnum, JSON, ForeignKey
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -31,6 +31,14 @@ class User(Base):
     status = Column(SAEnum(UserStatus), default=UserStatus.Active, nullable=False)
     lastLogin = Column(DateTime(timezone=True), nullable=True)
 
+    # DPDP Act: Granular consent preferences
+    consent_preferences = Column(JSON, default={
+        "analytics_consent": False,
+        "security_scanning_consent": True,
+        "pii_processing_consent": False,
+        "third_party_sharing_consent": False,
+    })
+
 
 class FileRecord(Base):
     __tablename__ = "files"
@@ -43,6 +51,10 @@ class FileRecord(Base):
     piiDetected = Column(Integer, default=0)
     rawFilePath = Column(String, nullable=False)
     sanitizationMethod = Column(String, default="masking")
+    # VirusTotal / CDR metadata
+    fileHash = Column(String, nullable=True)  # SHA-256 hash
+    vtScanResult = Column(String, nullable=True)  # "clean" | "skipped" | "malicious"
+    cdrApplied = Column(String, nullable=True)  # "none" | "pdf_sanitized" | "docx_sanitized"
 
 
 class AuditLog(Base):
@@ -55,3 +67,14 @@ class AuditLog(Base):
     file = Column(String, nullable=True)
     details = Column(String, nullable=False)
     ipAddress = Column(String, nullable=False, default="0.0.0.0")
+
+
+class ConsentAuditLog(Base):
+    """DPDP Act: Tamper-proof consent audit trail with cryptographic hashes."""
+    __tablename__ = "consent_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    consent_snapshot = Column(JSON, nullable=False)
+    consent_hash = Column(String, nullable=False)  # SHA-256(snapshot + user_id + timestamp)

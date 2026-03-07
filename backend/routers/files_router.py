@@ -1,6 +1,8 @@
 import os
 import io
 import json
+import shutil
+import hashlib
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
@@ -10,7 +12,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from auth import get_current_user, get_admin_user
-from config import LOCAL_UPLOAD_DIR
+from config import LOCAL_UPLOAD_DIR, QUARANTINE_DIR, CLEAN_DIR
 from database import get_db
 from models import FileRecord, FileStatus, User
 from siem_logger import log_audit_event
@@ -23,11 +25,14 @@ from services.pii_engine import (
     count_pii_in_sql,
     extract_pdf_text_with_positions,
 )
+from services.virustotal_client import vt_client, VirusTotalClient
+from services.cdr_service import sanitize_pdf as cdr_sanitize_pdf, sanitize_docx as cdr_sanitize_docx
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
-# Ensure local upload directory exists
-os.makedirs(LOCAL_UPLOAD_DIR, exist_ok=True)
+# Ensure storage directories exist
+for _dir in [LOCAL_UPLOAD_DIR, QUARANTINE_DIR, CLEAN_DIR]:
+    os.makedirs(_dir, exist_ok=True)
 
 
 class FileInfoOut(BaseModel):
@@ -37,6 +42,9 @@ class FileInfoOut(BaseModel):
     uploadedBy: str
     status: str
     piiDetected: int
+    fileHash: Optional[str] = None
+    vtScanResult: Optional[str] = None
+    cdrApplied: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -46,6 +54,9 @@ class FileUploadResponse(BaseModel):
     file_id: int
     status: str
     message: str
+    file_hash: Optional[str] = None
+    vt_result: Optional[str] = None
+    cdr_result: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +120,7 @@ def _sanitize_file_content(raw_bytes: bytes, filename: str, method: str) -> tupl
 
 
 # ---------------------------------------------------------------------------
-# POST /files/upload
+# POST /files/upload — Zero-Trust: Quarantine → VT Hash Check → CDR → Clean
 # ---------------------------------------------------------------------------
 @router.post("/upload", response_model=FileUploadResponse)
 async def upload_file(
@@ -120,30 +131,131 @@ async def upload_file(
     current_user: User = Depends(get_current_user),
 ):
     contents = await file.read()
-
-    # Save raw file to local disk
     safe_filename = file.filename.replace(" ", "_")
-    file_path = os.path.join(LOCAL_UPLOAD_DIR, f"{safe_filename}")
-    with open(file_path, "wb") as f:
+    ext = _get_file_ext(safe_filename)
+    client_ip = request.client.host if request.client else "0.0.0.0"
+
+    # ---------------------------------------------------------------
+    # Stage 1: Compute SHA-256 hash (privacy-first — never upload file)
+    # ---------------------------------------------------------------
+    file_hash = VirusTotalClient.compute_sha256(contents)
+
+    # ---------------------------------------------------------------
+    # Stage 2: Save to QUARANTINE with .quarantine extension
+    # ---------------------------------------------------------------
+    quarantine_name = f"{safe_filename}.quarantine"
+    quarantine_path = os.path.join(QUARANTINE_DIR, quarantine_name)
+    with open(quarantine_path, "wb") as f:
         f.write(contents)
 
+    log_audit_event(
+        db,
+        user=current_user.username,
+        action="File Quarantined",
+        details=f"File {safe_filename} placed in quarantine. SHA-256: {file_hash[:16]}...",
+        ip_address=client_ip,
+        file=safe_filename,
+        user_id=current_user.id,
+    )
+
+    # ---------------------------------------------------------------
+    # Stage 3: VirusTotal hash check
+    # ---------------------------------------------------------------
+    vt_result = await vt_client.check_file_hash(file_hash)
+    vt_status = "skipped" if vt_result["skipped"] else ("clean" if vt_result["safe"] else "malicious")
+
+    if not vt_result["safe"]:
+        # THREAT DETECTED — delete quarantined file, block upload
+        try:
+            os.remove(quarantine_path)
+        except OSError:
+            pass
+
+        log_audit_event(
+            db,
+            user=current_user.username,
+            action="Malicious File Blocked",
+            details=(
+                f"SECURITY ALERT: File {safe_filename} blocked. "
+                f"VirusTotal: {vt_result['malicious']} malicious, "
+                f"{vt_result['suspicious']} suspicious detections. "
+                f"SHA-256: {file_hash}"
+            ),
+            ip_address=client_ip,
+            file=safe_filename,
+            user_id=current_user.id,
+            status="blocked",
+        )
+
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Security Policy Violation: Malicious signature detected. "
+                f"{vt_result['malicious']} malicious, {vt_result['suspicious']} suspicious detections."
+            ),
+        )
+
+    # Log VT result
+    log_audit_event(
+        db,
+        user=current_user.username,
+        action="VT Scan Complete",
+        details=f"VirusTotal scan {vt_status} for {safe_filename}. SHA-256: {file_hash[:16]}...",
+        ip_address=client_ip,
+        file=safe_filename,
+        user_id=current_user.id,
+    )
+
+    # ---------------------------------------------------------------
+    # Stage 4: CDR — Content Disarm & Reconstruction
+    # ---------------------------------------------------------------
+    cdr_status = "none"
+    if ext == ".pdf":
+        cdr_stats = cdr_sanitize_pdf(quarantine_path)
+        if sum(cdr_stats.values()) > 0:
+            cdr_status = "pdf_sanitized"
+    elif ext == ".docx":
+        cdr_stats = cdr_sanitize_docx(quarantine_path)
+        if sum(cdr_stats.values()) > 0:
+            cdr_status = "docx_sanitized"
+
+    if cdr_status != "none":
+        log_audit_event(
+            db,
+            user=current_user.username,
+            action="CDR Applied",
+            details=f"Content Disarm & Reconstruction applied to {safe_filename}: {cdr_status}",
+            ip_address=client_ip,
+            file=safe_filename,
+            user_id=current_user.id,
+        )
+
+    # ---------------------------------------------------------------
+    # Stage 5: Move from quarantine to CLEAN storage
+    # ---------------------------------------------------------------
+    clean_path = os.path.join(CLEAN_DIR, safe_filename)
+    shutil.move(quarantine_path, clean_path)
+
     # Quick PII scan for count
-    ext = _get_file_ext(safe_filename)
+    # Re-read from clean path since CDR may have modified the file
+    with open(clean_path, "rb") as f:
+        clean_contents = f.read()
+
     pii_count = 0
     try:
         if ext == ".sql":
-            text = contents.decode("utf-8", errors="replace")
+            text = clean_contents.decode("utf-8", errors="replace")
             pii_count = count_pii_in_sql(text)
         elif ext in (".txt", ".csv", ".json"):
-            text = contents.decode("utf-8", errors="replace")
+            text = clean_contents.decode("utf-8", errors="replace")
             pii_count = count_pii(text)
         elif ext == ".pdf":
-            spans = extract_pdf_text_with_positions(contents)
+            spans = extract_pdf_text_with_positions(clean_contents)
             all_text = " ".join(s["text"] for s in spans)
             pii_count = count_pii(all_text)
         elif ext == ".docx":
             from docx import Document
-            doc = Document(io.BytesIO(contents))
+            doc = Document(io.BytesIO(clean_contents))
             all_text = " ".join(p.text for p in doc.paragraphs)
             pii_count = count_pii(all_text)
     except Exception:
@@ -155,20 +267,25 @@ async def upload_file(
         uploadedBy=current_user.username,
         status=FileStatus.Completed,
         piiDetected=pii_count,
-        rawFilePath=file_path,
+        rawFilePath=clean_path,
         sanitizationMethod=sanitization_method,
+        fileHash=file_hash,
+        vtScanResult=vt_status,
+        cdrApplied=cdr_status,
     )
     db.add(file_record)
     db.commit()
     db.refresh(file_record)
 
     # Audit log
-    client_ip = request.client.host if request.client else "0.0.0.0"
     log_audit_event(
         db,
         user=current_user.username,
         action="File Upload",
-        details=f"Uploaded {safe_filename}, {pii_count} PII instances detected",
+        details=(
+            f"Uploaded {safe_filename}, {pii_count} PII instances detected. "
+            f"VT: {vt_status}, CDR: {cdr_status}, SHA-256: {file_hash[:16]}..."
+        ),
         ip_address=client_ip,
         file=safe_filename,
         user_id=current_user.id,
@@ -188,6 +305,9 @@ async def upload_file(
         file_id=file_record.id,
         status="completed",
         message=f"File uploaded and processed successfully. {pii_count} PII instances detected.",
+        file_hash=file_hash,
+        vt_result=vt_status,
+        cdr_result=cdr_status,
     )
 
 
@@ -206,6 +326,9 @@ def get_files(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             uploadedBy=f.uploadedBy,
             status=f.status.value,
             piiDetected=f.piiDetected,
+            fileHash=f.fileHash,
+            vtScanResult=f.vtScanResult,
+            cdrApplied=f.cdrApplied,
         ))
     return result
 
@@ -321,18 +444,15 @@ def download_file(
     is_admin = current_user.role.value == "Admin"
 
     if is_admin:
-        # Admin gets raw file
         output_bytes = raw_bytes
         download_name = file_record.name
     else:
-        # Standard user gets dynamically sanitized file
         method = file_record.sanitizationMethod or "masking"
         output_bytes, _ = _sanitize_file_content(raw_bytes, file_record.name, method)
         download_name = f"sanitized_{file_record.name}"
 
     content_type = _get_content_type(ext)
 
-    # Audit log the download
     client_ip = request.client.host if request.client else "0.0.0.0"
     log_audit_event(
         db,
@@ -368,10 +488,19 @@ def search_file(
     raw_bytes = _read_raw_file(file_record)
     ext = _get_file_ext(file_record.name)
 
-    if ext not in (".txt", ".csv", ".json", ".sql"):
-        return {"results": [], "message": "Search only supported for text-based files"}
+    # Extract text based on format
+    if ext in (".txt", ".csv", ".json", ".sql"):
+        text = raw_bytes.decode("utf-8", errors="replace")
+    elif ext == ".pdf":
+        spans = extract_pdf_text_with_positions(raw_bytes)
+        text = "\n".join(s["text"] for s in spans)
+    elif ext == ".docx":
+        from docx import Document as DocxDocument
+        doc = DocxDocument(io.BytesIO(raw_bytes))
+        text = "\n".join(p.text for p in doc.paragraphs)
+    else:
+        return {"results": [], "message": "Search not supported for this file type"}
 
-    text = raw_bytes.decode("utf-8", errors="replace")
     lines = text.split("\n")
     results = []
     for i, line in enumerate(lines):

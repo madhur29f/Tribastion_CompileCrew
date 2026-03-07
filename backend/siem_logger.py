@@ -1,6 +1,6 @@
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from pythonjsonlogger import jsonlogger
 from sqlalchemy.orm import Session
@@ -71,3 +71,64 @@ def log_audit_event(
     )
 
     return log_entry
+
+
+# ---------------------------------------------------------------------------
+# DPDP Act: Redact a user's identity from audit logs
+# ---------------------------------------------------------------------------
+REDACTED_MARKER = "[REDACTED_DPDP_COMPLIANCE]"
+
+
+def redact_user_from_logs(
+    db: Session,
+    *,
+    username: str,
+    email: str,
+    days: int = 30,
+):
+    """
+    DPDP Act — Right to be Forgotten.
+
+    Scans audit_logs from the last `days` days, replaces any occurrence of
+    the user's username or email with [REDACTED_DPDP_COMPLIANCE].
+
+    This ensures the user's digital footprint is scrubbed from SIEM records
+    without breaking database integrity (rows are updated, not deleted).
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # Find all audit log entries mentioning this user (by username or in details)
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.timestamp >= cutoff)
+        .filter(
+            (AuditLog.user == username)
+            | (AuditLog.details.contains(username))
+            | (AuditLog.details.contains(email))
+        )
+        .all()
+    )
+
+    redacted_count = 0
+    for log in logs:
+        if log.user == username:
+            log.user = REDACTED_MARKER
+        if username in log.details:
+            log.details = log.details.replace(username, REDACTED_MARKER)
+        if email in log.details:
+            log.details = log.details.replace(email, REDACTED_MARKER)
+        redacted_count += 1
+
+    if redacted_count > 0:
+        db.commit()
+
+    siem_logger.info(
+        f"DPDP: Redacted {redacted_count} audit log entries for user erasure",
+        extra={
+            "event_type": "DPDP_Log_Redaction",
+            "entries_redacted": redacted_count,
+            "lookback_days": days,
+        },
+    )
+
+    return redacted_count

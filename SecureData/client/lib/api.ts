@@ -110,6 +110,51 @@ export const usersAPI = {
   },
 };
 
+// ==================== DPDP Consent ====================
+export interface ConsentPreferences {
+  analytics_consent: boolean;
+  security_scanning_consent: boolean;
+  pii_processing_consent: boolean;
+  third_party_sharing_consent: boolean;
+}
+
+export interface ConsentAuditEntry {
+  id: number;
+  timestamp: string;
+  consent_snapshot: ConsentPreferences;
+  consent_hash: string;
+}
+
+export interface DeletionCertificate {
+  certificate_id: string;
+  erased_at: string;
+  message: string;
+  audit_logs_redacted: number;
+  files_deleted: number;
+}
+
+export const consentAPI = {
+  getConsent: async (): Promise<{ preferences: ConsentPreferences }> => {
+    const response = await apiClient.get("/users/consent");
+    return response.data;
+  },
+
+  updateConsent: async (preferences: ConsentPreferences) => {
+    const response = await apiClient.put("/users/consent", preferences);
+    return response.data;
+  },
+
+  getAuditTrail: async (): Promise<ConsentAuditEntry[]> => {
+    const response = await apiClient.get<ConsentAuditEntry[]>("/users/consent/audit");
+    return response.data;
+  },
+
+  forgetMe: async (): Promise<DeletionCertificate> => {
+    const response = await apiClient.post<DeletionCertificate>("/users/forget-me");
+    return response.data;
+  },
+};
+
 // ==================== Audit Logs ====================
 export const logsAPI = {
   getLogs: async (): Promise<AuditLog[]> => {
