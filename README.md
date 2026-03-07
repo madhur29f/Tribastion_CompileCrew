@@ -88,8 +88,8 @@ Tribastion_CompileCrew/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-org/nirmahackathon.git
-cd nirmahackathon
+git clone https://github.com/madhur29f/Tribastion_CompileCrew.git
+cd Tribastion_CompileCrew
 ```
 
 ---
