@@ -16,11 +16,12 @@ SecureData is a **privacy-focused data sanitization platform** that detects and 
 5. [Running the Application](#running-the-application)
 6. [Demo Credentials](#demo-credentials)
 7. [Key Features](#key-features)
-8. [Supported File Formats](#supported-file-formats)
-9. [Technology Stack](#technology-stack)
-10. [API Overview](#api-overview)
-11. [Troubleshooting](#troubleshooting)
-12. [License](#license)
+8. [Redaction Pipeline](#redaction-pipeline)
+9. [Supported File Formats](#supported-file-formats)
+10. [Technology Stack](#technology-stack)
+11. [API Overview](#api-overview)
+12. [Troubleshooting](#troubleshooting)
+13. [License](#license)
 
 ---
 
@@ -242,6 +243,12 @@ Navigate to **http://localhost:8080** in your browser.
 
 ## Key Features
 
+## Data Flow Diagram
+<img width="1226" height="675" alt="image" src="https://github.com/user-attachments/assets/49ea4e00-2458-4c60-aaf8-91be3ddff7c3" />
+
+## Architecture
+<img width="845" height="708" alt="image" src="https://github.com/user-attachments/assets/fbf3c863-edd0-4c72-8aad-76466d980bb1" />
+
 ### PII Detection & Sanitization
 - Automated PII detection using Microsoft Presidio NLP engine
 - Supports **masking**, **redaction**, and **tokenization**
@@ -267,6 +274,9 @@ Navigate to **http://localhost:8080** in your browser.
 - **Standard User**: Upload files, view sanitized results, manage consent preferences
 
 ---
+## Redaction Pipeline
+<img width="2076" height="1163" alt="image" src="https://github.com/user-attachments/assets/1bc2e43d-998b-4529-a0ad-3d7dc148db04" />
+
 
 ## Supported File Formats
 
@@ -311,6 +321,9 @@ Navigate to **http://localhost:8080** in your browser.
 | Data Fetching      | Axios + React Query                  |
 | Charts             | Recharts                             |
 
+<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/70475b64-9478-4550-ac7b-65957c66171a" />
+
+
 ---
 
 ## API Overview
@@ -333,6 +346,8 @@ All API endpoints are mounted under `/api`. Key routes:
 | DELETE | `/api/users/me/forget`       | Right to be Forgotten erasure       |
 
 Full interactive API docs are available at **http://localhost:8000/docs** (Swagger UI) when the backend is running.
+
+
 
 ---
 
