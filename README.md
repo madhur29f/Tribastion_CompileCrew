@@ -1,6 +1,17 @@
 # SecureData – PII Data Sanitization & DPDP Compliance Platform
 
-SecureData is a **privacy-focused data sanitization platform** that detects and protects sensitive information in datasets before sharing or processing. It automatically identifies **Personally Identifiable Information (PII)** and applies **masking, redaction, and tokenization**, with full compliance features for the **Digital Personal Data Protection (DPDP) Act**.
+SecureData is a **privacy-focused data sanitization platform** that detects and protects sensitive information in datasets before sharing or processing. It automatically identifies **Personally Identifiable Information (PII)** and applies **masking, redaction, and tokenization**, with full compliance features for the **Digital Personal Data Protection (DPDP) Act**. It is compliant with the following formats: SQL, JSON, CSV, TXT, PDF, DOCX, PNG, JPG.
+
+## Application Screenshots (Installation Instructions are below)
+1) Sanitize CSV
+<img width="2128" height="831" alt="image" src="https://github.com/user-attachments/assets/4107526a-043b-451f-9693-7996b04ec04e" />
+
+2) Sanitize Image
+<img width="2101" height="945" alt="image" src="https://github.com/user-attachments/assets/9faedbaf-516b-4df7-b617-972b733b6168" />
+
+3) SIEM-Compatible Audit Logs
+<img width="2559" height="1233" alt="image" src="https://github.com/user-attachments/assets/568d277c-fbdd-4543-a6d6-f1d85e60ca98" />
+
 
 ---
 
