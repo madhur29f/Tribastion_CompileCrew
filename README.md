@@ -2,7 +2,7 @@
 
 SecureData is a **privacy-focused data sanitization platform** that detects and protects sensitive information in datasets before sharing or processing. It automatically identifies **Personally Identifiable Information (PII)** and applies **masking, redaction, and tokenization**, with full compliance features for the **Digital Personal Data Protection (DPDP) Act(VirusTotal Support, SHA-256 Hashing)**. It is compliant with the following formats: SQL, JSON, CSV, TXT, PDF, DOCX, PNG, JPG.
 
-## Application Screenshots (Installation Instructions are below)
+## Sample Application Screenshots - Video Covers entire Platform in Detail (Installation Instructions are below)
 1) Sanitize CSV
 <img width="2128" height="831" alt="image" src="https://github.com/user-attachments/assets/4107526a-043b-451f-9693-7996b04ec04e" />
 
