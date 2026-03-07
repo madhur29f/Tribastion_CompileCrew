@@ -69,12 +69,24 @@ def count_pii(text: str) -> int:
 # ---------------------------------------------------------------------------
 def _get_operators(method: str) -> dict:
     """Return Presidio operator configs for the given sanitization method."""
+    redact_op = OperatorConfig("replace", {"new_value": "[REDACTED]"})
+    mask_op = OperatorConfig("mask", {"type": "mask", "masking_char": "*", "chars_to_mask": 8, "from_end": False})
+    hash_op = OperatorConfig("hash", {"hash_type": "sha256"})
+
+    if method == "smart":
+        critical_entities = ["AADHAAR_NUMBER", "PAN_NUMBER", "IP_ADDRESS"]
+        return {
+            entity: (redact_op if entity in critical_entities else mask_op)
+            for entity in SUPPORTED_ENTITIES
+        }
+
     if method == "redaction":
-        op = OperatorConfig("replace", {"new_value": "[REDACTED]"})
+        op = redact_op
     elif method == "tokenization":
-        op = OperatorConfig("hash", {"hash_type": "sha256"})
+        op = hash_op
     else:  # masking (default)
-        op = OperatorConfig("mask", {"type": "mask", "masking_char": "*", "chars_to_mask": 8, "from_end": False})
+        op = mask_op
+    
     return {entity: op for entity in SUPPORTED_ENTITIES}
 
 
@@ -237,12 +249,16 @@ def anonymize_pdf(raw_bytes: bytes, method: str = "masking") -> bytes:
                         if span_end > result.start and span_start < result.end:
                             bbox = fitz.Rect(span["bbox"])
 
-                            if method == "redaction":
-                                # Black box redaction
-                                page.add_redact_annot(bbox, fill=(0, 0, 0))
+                            sanitized = anonymize_text(pii_text, method)
+                            if sanitized == "[REDACTED]":
+                                page.add_redact_annot(
+                                    bbox,
+                                    text="[REDACTED]",
+                                    fontsize=span.get("size", 10) * 0.8,
+                                    fill=(0, 0, 0),
+                                    text_color=(1, 1, 1)
+                                )
                             else:
-                                # For masking/tokenization, redact then overlay text
-                                sanitized = anonymize_text(pii_text, method)
                                 page.add_redact_annot(
                                     bbox,
                                     text=sanitized,

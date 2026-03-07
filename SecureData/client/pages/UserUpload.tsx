@@ -9,6 +9,7 @@ export default function UserUpload() {
     const [file, setFile] = useState<File | null>(null);
     const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "verifying" | "success">("idle");
     const [progress, setProgress] = useState(0);
+    const [sanitizationMethod, setSanitizationMethod] = useState<"masking" | "redaction" | "tokenization" | "smart">("smart");
 
     const onDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -46,7 +47,7 @@ export default function UserUpload() {
         }, 200);
 
         try {
-            await filesAPI.uploadFile(file);
+            await filesAPI.uploadFile(file, sanitizationMethod);
             clearInterval(progressInterval);
             setProgress(100);
             setUploadStatus("verifying");
@@ -113,7 +114,7 @@ export default function UserUpload() {
                                             <UploadIcon className="w-16 h-16" />
                                         </div>
                                         <h3 className="text-2xl font-bold text-foreground mb-2">Drag & Drop Dataset</h3>
-                                        <p className="text-muted-foreground mb-8">Supported formats: CSV, JSON, Parquet, TXT</p>
+                                        <p className="text-muted-foreground mb-8">Supported formats: CSV, JSON, Parquet, TXT, PDF</p>
 
                                         <div className="flex gap-4">
                                             <div className="badge-info px-4 py-2"><Database className="w-4 h-4" /> Max 5GB</div>
@@ -134,7 +135,7 @@ export default function UserUpload() {
                                             id="file-upload"
                                             className="hidden"
                                             onChange={onFileSelect}
-                                            accept=".csv,.json,.parquet,.txt"
+                                            accept=".csv,.json,.parquet,.txt,.pdf"
                                         />
                                         <label
                                             htmlFor="file-upload"
@@ -153,7 +154,7 @@ export default function UserUpload() {
                                         exit={{ opacity: 0, scale: 0.9 }}
                                         className="w-full max-w-lg"
                                     >
-                                        <div className="glass-card p-6 flex items-center gap-6 mb-8 text-left border-primary/30 shadow-[0_0_30px_rgba(20,184,166,0.1)]">
+                                        <div className="glass-card p-6 flex items-center gap-6 mb-6 text-left border-primary/30 shadow-[0_0_30px_rgba(20,184,166,0.1)]">
                                             <div className="p-4 bg-primary/20 rounded-2xl flex-shrink-0">
                                                 <FileText className="w-10 h-10 text-primary" />
                                             </div>
@@ -166,6 +167,27 @@ export default function UserUpload() {
                                                 className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
                                             >
                                                 <X className="w-6 h-6" />
+                                            </button>
+                                        </div>
+
+                                        <div className="mb-8 p-1 glass-card border-primary/20 flex gap-1 rounded-xl">
+                                            <button
+                                                onClick={() => setSanitizationMethod('smart')}
+                                                className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${sanitizationMethod === 'smart' ? 'bg-primary text-primary-foreground shadow-md' : 'text-muted-foreground hover:bg-secondary/50'}`}
+                                            >
+                                                Smart
+                                            </button>
+                                            <button
+                                                onClick={() => setSanitizationMethod('masking')}
+                                                className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${sanitizationMethod === 'masking' ? 'bg-primary text-primary-foreground shadow-md' : 'text-muted-foreground hover:bg-secondary/50'}`}
+                                            >
+                                                Masking
+                                            </button>
+                                            <button
+                                                onClick={() => setSanitizationMethod('redaction')}
+                                                className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${sanitizationMethod === 'redaction' ? 'bg-primary text-primary-foreground shadow-md' : 'text-muted-foreground hover:bg-secondary/50'}`}
+                                            >
+                                                Redaction
                                             </button>
                                         </div>
 
