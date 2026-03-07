@@ -1,6 +1,7 @@
 import os
 import io
 import json
+import base64
 import shutil
 import hashlib
 from pathlib import Path
@@ -22,8 +23,11 @@ from services.pii_engine import (
     anonymize_sql,
     anonymize_pdf,
     anonymize_docx,
+    anonymize_image,
     count_pii_in_sql,
+    count_pii_in_image,
     extract_pdf_text_with_positions,
+    calculate_risk_score,
 )
 from services.virustotal_client import vt_client, VirusTotalClient
 from services.cdr_service import sanitize_pdf as cdr_sanitize_pdf, sanitize_docx as cdr_sanitize_docx
@@ -45,6 +49,8 @@ class FileInfoOut(BaseModel):
     fileHash: Optional[str] = None
     vtScanResult: Optional[str] = None
     cdrApplied: Optional[str] = None
+    piiRiskScore: int = 0
+    dataClassificationTier: str = "Public"
 
     class Config:
         from_attributes = True
@@ -74,6 +80,10 @@ def _read_raw_file(file_record: FileRecord) -> bytes:
         return f.read()
 
 
+# Image extensions we support
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp"}
+
+
 def _get_content_type(ext: str) -> str:
     mapping = {
         ".pdf": "application/pdf",
@@ -82,6 +92,13 @@ def _get_content_type(ext: str) -> str:
         ".json": "application/json",
         ".sql": "text/plain",
         ".txt": "text/plain",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".bmp": "image/bmp",
+        ".tiff": "image/tiff",
+        ".tif": "image/tiff",
+        ".webp": "image/webp",
     }
     return mapping.get(ext, "application/octet-stream")
 
@@ -101,6 +118,10 @@ def _sanitize_file_content(raw_bytes: bytes, filename: str, method: str) -> tupl
     elif ext == ".docx":
         sanitized = anonymize_docx(raw_bytes, method)
         return sanitized, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    elif ext in IMAGE_EXTENSIONS:
+        sanitized_img, _ = anonymize_image(raw_bytes, method)
+        return sanitized_img, "image/png"  # always output as PNG
 
     elif ext == ".sql":
         text = raw_bytes.decode("utf-8", errors="replace")
@@ -242,22 +263,38 @@ async def upload_file(
         clean_contents = f.read()
 
     pii_count = 0
+    risk_score = 0
+    classification_tier = "Public"
     try:
         if ext == ".sql":
             text = clean_contents.decode("utf-8", errors="replace")
             pii_count = count_pii_in_sql(text)
+            risk_score, classification_tier, _ = calculate_risk_score(text)
         elif ext in (".txt", ".csv", ".json"):
             text = clean_contents.decode("utf-8", errors="replace")
             pii_count = count_pii(text)
+            risk_score, classification_tier, _ = calculate_risk_score(text)
         elif ext == ".pdf":
             spans = extract_pdf_text_with_positions(clean_contents)
             all_text = " ".join(s["text"] for s in spans)
             pii_count = count_pii(all_text)
+            risk_score, classification_tier, _ = calculate_risk_score(all_text)
         elif ext == ".docx":
             from docx import Document
             doc = Document(io.BytesIO(clean_contents))
             all_text = " ".join(p.text for p in doc.paragraphs)
             pii_count = count_pii(all_text)
+            risk_score, classification_tier, _ = calculate_risk_score(all_text)
+        elif ext in IMAGE_EXTENSIONS:
+            pii_count = count_pii_in_image(clean_contents)
+            # For images, score based on pii_count heuristic + face detection
+            risk_score = min(pii_count * 15, 100)
+            if risk_score >= 75:
+                classification_tier = "Strictly Confidential"
+            elif risk_score >= 50:
+                classification_tier = "Confidential"
+            elif risk_score >= 25:
+                classification_tier = "Internal"
     except Exception:
         pii_count = 0
 
@@ -272,6 +309,8 @@ async def upload_file(
         fileHash=file_hash,
         vtScanResult=vt_status,
         cdrApplied=cdr_status,
+        piiRiskScore=risk_score,
+        dataClassificationTier=classification_tier,
     )
     db.add(file_record)
     db.commit()
@@ -296,8 +335,23 @@ async def upload_file(
             db,
             user="System",
             action="PII Detection",
-            details=f"Detected {pii_count} PII instances in {safe_filename}",
+            details=f"Detected {pii_count} PII instances in {safe_filename}. Risk Score: {risk_score}/100, Classification: {classification_tier}",
             ip_address="N/A",
+            file=safe_filename,
+        )
+
+    # SIEM alert for Strictly Confidential data (DPDP Act)
+    if classification_tier == "Strictly Confidential":
+        log_audit_event(
+            db,
+            user="System",
+            action="DPDP_High_Risk_Alert",
+            details=(
+                f"ALERT: File '{safe_filename}' classified as STRICTLY CONFIDENTIAL "
+                f"(Risk Score: {risk_score}/100). Highly sensitive DPDP-regulated data "
+                f"has entered the system. Uploaded by: {current_user.username}"
+            ),
+            ip_address=client_ip,
             file=safe_filename,
         )
 
@@ -316,7 +370,12 @@ async def upload_file(
 # ---------------------------------------------------------------------------
 @router.get("", response_model=list[FileInfoOut])
 def get_files(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    files = db.query(FileRecord).order_by(FileRecord.uploadDate.desc()).all()
+    is_admin = current_user.role.value == "Admin"
+    query = db.query(FileRecord).order_by(FileRecord.uploadDate.desc())
+    # Standard users only see their own files
+    if not is_admin:
+        query = query.filter(FileRecord.uploadedBy == current_user.username)
+    files = query.all()
     result = []
     for f in files:
         result.append(FileInfoOut(
@@ -329,6 +388,8 @@ def get_files(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             fileHash=f.fileHash,
             vtScanResult=f.vtScanResult,
             cdrApplied=f.cdrApplied,
+            piiRiskScore=f.piiRiskScore or 0,
+            dataClassificationTier=f.dataClassificationTier or "Public",
         ))
     return result
 
@@ -354,6 +415,12 @@ def get_raw_file(file_id: int, db: Session = Depends(get_db), admin: User = Depe
             except json.JSONDecodeError:
                 return {"content": text}
         return {"content": text}
+
+    # For image files, return base64-encoded data for <img> rendering
+    if ext in IMAGE_EXTENSIONS:
+        b64 = base64.b64encode(raw_bytes).decode("ascii")
+        mime = _get_content_type(ext)
+        return {"content": b64, "file_type": "image", "mime_type": mime}
 
     # For PDF/DOCX, extract text for display in the viewer
     if ext == ".pdf":
@@ -389,6 +456,11 @@ def get_sanitized_file(
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
 
+    # Ownership check: Standard users can only view their own files
+    is_admin = current_user.role.value == "Admin"
+    if not is_admin and file_record.uploadedBy != current_user.username:
+        raise HTTPException(status_code=403, detail="Access denied: you can only view your own files")
+
     raw_bytes = _read_raw_file(file_record)
     method = file_record.sanitizationMethod or "masking"
     ext = _get_file_ext(file_record.name)
@@ -404,6 +476,11 @@ def get_sanitized_file(
             except json.JSONDecodeError:
                 return {"content": text}
         return {"content": text}
+
+    # For image files, return base64-encoded sanitized image
+    if ext in IMAGE_EXTENSIONS:
+        b64 = base64.b64encode(sanitized_bytes).decode("ascii")
+        return {"content": b64, "file_type": "image", "mime_type": "image/png"}
 
     # For PDF/DOCX, extract text from sanitized output for display
     if ext == ".pdf":
@@ -437,6 +514,11 @@ def download_file(
     file_record = db.query(FileRecord).filter(FileRecord.id == file_id).first()
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
+
+    # Ownership check: Standard users can only download their own files
+    is_admin = current_user.role.value == "Admin"
+    if not is_admin and file_record.uploadedBy != current_user.username:
+        raise HTTPException(status_code=403, detail="Access denied: you can only download your own files")
 
     raw_bytes = _read_raw_file(file_record)
     ext = _get_file_ext(file_record.name)
@@ -485,6 +567,11 @@ def search_file(
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
 
+    # Ownership check: Standard users can only search their own files
+    is_admin = current_user.role.value == "Admin"
+    if not is_admin and file_record.uploadedBy != current_user.username:
+        raise HTTPException(status_code=403, detail="Access denied: you can only search your own files")
+
     raw_bytes = _read_raw_file(file_record)
     ext = _get_file_ext(file_record.name)
 
@@ -498,6 +585,8 @@ def search_file(
         from docx import Document as DocxDocument
         doc = DocxDocument(io.BytesIO(raw_bytes))
         text = "\n".join(p.text for p in doc.paragraphs)
+    elif ext in IMAGE_EXTENSIONS:
+        return {"results": [], "message": "Search is not supported for image files"}
     else:
         return {"results": [], "message": "Search not supported for this file type"}
 

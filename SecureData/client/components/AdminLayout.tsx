@@ -11,12 +11,10 @@ import {
   Users,
   Eye,
   FileCheck,
-  Bell,
   Moon,
   Sun,
   ChevronDown,
   Activity,
-  Search,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { authAPI } from "@/lib/api";
@@ -135,23 +133,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="hidden md:flex items-center gap-3 bg-secondary/10 border border-border rounded-lg px-4 py-2">
-              <Search className="w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search files, users, logs..."
-                className="bg-transparent outline-none text-sm w-64 placeholder-muted-foreground"
-              />
-            </div>
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Notifications */}
-            <button className="relative p-2 hover:bg-secondary rounded-lg transition-all">
-              <Bell className="w-5 h-5 text-foreground" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
-            </button>
-
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}

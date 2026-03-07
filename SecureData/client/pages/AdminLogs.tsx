@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
-import { Search, Filter, ChevronDown, Activity, ShieldAlert, DownloadCloud, LogIn, ShieldCheck } from "lucide-react";
+import { Search, ChevronDown, Activity, ShieldAlert, DownloadCloud, LogIn, ShieldCheck, FileDown } from "lucide-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { logsAPI } from "@/lib/api";
+import apiClient from "@/lib/api-client";
 
 interface AuditLogEntry {
   id: number;
   timestamp: string;
   user: string;
-  action: "File Upload" | "PII Detection" | "File Download" | "User Login";
+  action: string;
   file?: string;
   details: string;
   ipAddress: string;
@@ -35,7 +36,7 @@ export default function AdminLogs() {
           id: index + 1,
           timestamp: new Date(log.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
           user: log.user,
-          action: log.action as AuditLogEntry["action"],
+          action: log.action,
           file: log.file || undefined,
           details: log.details,
           ipAddress: log.ipAddress,
@@ -64,7 +65,7 @@ export default function AdminLogs() {
     return matchesSearch && matchesAction;
   });
 
-  const getActionStyles = (action: AuditLogEntry["action"]) => {
+  const getActionStyles = (action: string) => {
     switch (action) {
       case "File Upload":
         return { color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20", icon: <Activity className="w-4 h-4" /> };
@@ -74,6 +75,8 @@ export default function AdminLogs() {
         return { color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20", icon: <DownloadCloud className="w-4 h-4" /> };
       case "User Login":
         return { color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/20", icon: <LogIn className="w-4 h-4" /> };
+      default:
+        return { color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/20", icon: <ShieldCheck className="w-4 h-4" /> };
     }
   };
 
@@ -104,7 +107,7 @@ export default function AdminLogs() {
             </div>
           </div>
 
-          <div className="relative z-10 flex gap-4">
+          <div className="relative z-10 flex gap-4 items-end">
             <div className="bg-background/80 backdrop-blur-md px-6 py-4 rounded-2xl text-center border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Total Events</p>
               <p className="text-3xl font-black text-foreground font-mono">{logs.length}</p>
@@ -113,6 +116,25 @@ export default function AdminLogs() {
               <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Anomalies</p>
               <p className="text-3xl font-black text-red-500 font-mono">0</p>
             </div>
+            <button
+              onClick={async () => {
+                try {
+                  const response = await apiClient.get("/logs/export/siem", { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([response.data]));
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "securedata_siem_audit.log";
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                } catch (err) {
+                  console.error("Failed to export SIEM logs:", err);
+                }
+              }}
+              className="bg-primary/10 hover:bg-primary/20 border border-primary/30 hover:border-primary/50 backdrop-blur-md px-5 py-4 rounded-2xl flex flex-col items-center gap-2 transition-all group shadow-[0_8px_32px_rgba(0,0,0,0.12)] hover:shadow-primary/20"
+            >
+              <FileDown className="w-6 h-6 text-primary group-hover:scale-110 transition-transform" />
+              <p className="text-[10px] font-black text-primary uppercase tracking-widest">Export CEF</p>
+            </button>
           </div>
         </motion.div>
 
@@ -176,10 +198,7 @@ export default function AdminLogs() {
             ))}
           </div>
 
-          <button className="flex items-center justify-center gap-2 px-6 py-3 border-2 border-border/50 rounded-xl hover:bg-secondary/50 hover:border-primary/50 transition-all font-bold text-sm shadow-sm bg-card/50 backdrop-blur-md">
-            <Filter className="w-4 h-4" />
-            Temporal Filter
-          </button>
+
         </motion.div>
 
         {/* Logs Table */}
@@ -290,14 +309,6 @@ export default function AdminLogs() {
             <p className="text-[11px] font-black text-muted-foreground uppercase tracking-widest">
               Showing {filteredLogs.length} of {logs.length} entries
             </p>
-            <div className="flex gap-2">
-              <button className="px-4 py-2 border border-white/10 rounded-lg hover:bg-white/10 transition-all text-xs font-bold text-foreground">
-                Prev
-              </button>
-              <button className="px-4 py-2 border border-white/10 rounded-lg hover:bg-white/10 transition-all text-xs font-bold text-foreground">
-                Next
-              </button>
-            </div>
           </div>
         </motion.div>
 

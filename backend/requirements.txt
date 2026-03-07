@@ -17,3 +17,5 @@ pandas
 sqlparse
 httpx
 pikepdf
+Pillow
+easyocr

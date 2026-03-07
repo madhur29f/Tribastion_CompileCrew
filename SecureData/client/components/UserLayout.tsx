@@ -3,17 +3,15 @@ import { useNavigate } from "react-router-dom";
 import {
   Menu,
   X,
-  Eye,
   Download,
-  Search,
-  Settings,
+  ShieldCheck,
   LogOut,
   Moon,
   Sun,
   ChevronDown,
-  Bell,
   FileText,
   Upload,
+  LayoutDashboard,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { authAPI } from "@/lib/api";
@@ -46,11 +44,10 @@ export function UserLayout({ children }: UserLayoutProps) {
   };
 
   const navItems = [
-    { icon: Eye, label: "Sanitized Data", path: "/user/dashboard" },
+    { icon: LayoutDashboard, label: "Dashboard", path: "/user/dashboard" },
     { icon: Upload, label: "Upload Files", path: "/user/upload" },
     { icon: Download, label: "Downloads", path: "/user/downloads" },
-    { icon: Search, label: "Search", path: "/user/search" },
-    { icon: Settings, label: "Settings", path: "/user/settings" },
+    { icon: ShieldCheck, label: "DPDP Compliance", path: "/user/settings" },
   ];
 
   return (
@@ -123,11 +120,6 @@ export function UserLayout({ children }: UserLayoutProps) {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Notifications */}
-            <button className="relative p-2 hover:bg-secondary rounded-lg transition-all">
-              <Bell className="w-5 h-5 text-foreground" />
-            </button>
-
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}

@@ -39,6 +39,8 @@ export interface FileInfo {
   uploadedBy: string;
   status: "Completed" | "Processing" | "Failed";
   piiDetected: number;
+  piiRiskScore?: number;
+  dataClassificationTier?: "Public" | "Internal" | "Confidential" | "Strictly Confidential";
 }
 
 export interface FileData {

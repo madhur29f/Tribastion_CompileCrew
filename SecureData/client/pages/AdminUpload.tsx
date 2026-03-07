@@ -258,7 +258,7 @@ export default function AdminUpload() {
                   type="file"
                   onChange={handleFileSelect}
                   className="hidden"
-                  accept=".sql,.csv,.json,.pdf,.docx,.txt,.png,.jpg,.jpeg"
+                  accept=".sql,.csv,.json,.pdf,.docx,.txt,.png,.jpg,.jpeg,.bmp,.tiff,.tif,.webp"
                 />
               </div>
             </div>

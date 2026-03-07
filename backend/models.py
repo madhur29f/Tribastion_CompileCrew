@@ -55,6 +55,9 @@ class FileRecord(Base):
     fileHash = Column(String, nullable=True)  # SHA-256 hash
     vtScanResult = Column(String, nullable=True)  # "clean" | "skipped" | "malicious"
     cdrApplied = Column(String, nullable=True)  # "none" | "pdf_sanitized" | "docx_sanitized"
+    # DPDP Act: PII Risk Scoring
+    piiRiskScore = Column(Integer, default=0)  # 0-100 risk score
+    dataClassificationTier = Column(String, default="Public")  # Public | Internal | Confidential | Strictly Confidential
 
 
 class AuditLog(Base):

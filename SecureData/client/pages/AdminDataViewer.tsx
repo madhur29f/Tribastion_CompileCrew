@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Code, FileText, Table, ServerCrash, Loader } from "lucide-react";
+import { Eye, EyeOff, Code, FileText, Table, ServerCrash, Loader, ImageIcon } from "lucide-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { filesAPI } from "@/lib/api";
 
-type ViewMode = "text" | "table" | "json";
+type ViewMode = "text" | "table" | "json" | "image";
 
 interface FileOption {
   id: number;
@@ -85,6 +85,20 @@ export default function AdminDataViewer() {
   const rawRows = parseTableRows(rawText);
   const sanitizedRows = parseTableRows(sanitizedText);
 
+  // Detect image file types from API response
+  const isImageData = (data: any): boolean => {
+    return data && typeof data === "object" && data.file_type === "image";
+  };
+
+  const getImageSrc = (data: any): string => {
+    if (!data) return "";
+    const mime = data.mime_type || "image/png";
+    return `data:${mime};base64,${data.content}`;
+  };
+
+  const rawIsImage = isImageData(rawData);
+  const sanitizedIsImage = isImageData(sanitizedData);
+
   return (
     <AdminLayout>
       <motion.div
@@ -115,7 +129,7 @@ export default function AdminDataViewer() {
         {/* View Mode & File Selector */}
         <motion.div variants={itemVariants} className="flex flex-wrap gap-4 items-center justify-between bg-secondary/30 p-2 rounded-xl border border-white/5">
           <div className="flex gap-2">
-            {(["text", "table", "json"] as ViewMode[]).map((mode) => (
+            {(["text", "table", "json", ...(rawIsImage || sanitizedIsImage ? ["image" as ViewMode] : [])] as ViewMode[]).map((mode) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
@@ -127,6 +141,7 @@ export default function AdminDataViewer() {
                 {mode === "text" && <FileText className="w-4 h-4" />}
                 {mode === "table" && <Table className="w-4 h-4" />}
                 {mode === "json" && <Code className="w-4 h-4" />}
+                {mode === "image" && <ImageIcon className="w-4 h-4" />}
                 <span className="capitalize">{mode}</span>
               </button>
             ))}
@@ -174,7 +189,42 @@ export default function AdminDataViewer() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3 }}
             >
-              {viewMode === "text" ? (
+              {viewMode === "image" || (rawIsImage && viewMode === "text") ? (
+                /* ---- Image View ---- */
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Raw Image */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-destructive/10 rounded-xl border border-destructive/20"><Eye className="w-5 h-5 text-destructive" /></div>
+                      <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Source Image</h3>
+                    </div>
+                    <div className="bg-destructive/5 border-2 border-destructive/20 rounded-2xl p-4 shadow-md relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-2 opacity-50"><span className="text-[10px] font-mono text-destructive tracking-widest bg-destructive/10 px-2 py-1 rounded">UNSECURED</span></div>
+                      {rawIsImage ? (
+                        <img src={getImageSrc(rawData)} alt="Raw image" className="w-full h-auto rounded-lg mt-4 max-h-[600px] object-contain" />
+                      ) : (
+                        <pre className="text-sm font-mono whitespace-pre-wrap break-words mt-4 text-destructive">{rawText || "No data"}</pre>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sanitized Image */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-accent/10 rounded-xl border border-accent/20"><EyeOff className="w-5 h-5 text-accent" /></div>
+                      <h3 className="text-xl font-black text-foreground uppercase tracking-tight">Neutralized Image</h3>
+                    </div>
+                    <div className="bg-accent/5 border-2 border-accent/20 rounded-2xl p-4 shadow-md relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-2 opacity-50"><span className="text-[10px] font-mono text-accent tracking-widest bg-accent/10 px-2 py-1 rounded">SECURED</span></div>
+                      {sanitizedIsImage ? (
+                        <img src={getImageSrc(sanitizedData)} alt="Sanitized image" className="w-full h-auto rounded-lg mt-4 max-h-[600px] object-contain" />
+                      ) : (
+                        <pre className="text-sm font-mono whitespace-pre-wrap break-words mt-4 text-accent">{sanitizedText || "No data"}</pre>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : viewMode === "text" ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Raw Data */}
                   <div className="space-y-4">

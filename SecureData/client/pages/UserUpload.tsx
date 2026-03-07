@@ -114,10 +114,10 @@ export default function UserUpload() {
                                             <UploadIcon className="w-16 h-16" />
                                         </div>
                                         <h3 className="text-2xl font-bold text-foreground mb-2">Drag & Drop Dataset</h3>
-                                        <p className="text-muted-foreground mb-8">Supported formats: CSV, JSON, Parquet, TXT, PDF</p>
+                                        <p className="text-muted-foreground mb-8">Supported formats: CSV, JSON, TXT, PDF, PNG, JPG, BMP, TIFF</p>
 
                                         <div className="flex gap-4">
-                                            <div className="badge-info px-4 py-2"><Database className="w-4 h-4" /> Max 5GB</div>
+                                            <div className="badge-info px-4 py-2"><Database className="w-4 h-4" /> Secure Storage</div>
                                             <div className="badge-success px-4 py-2"><Lock className="w-4 h-4" /> E2E Encrypted</div>
                                         </div>
 
@@ -135,7 +135,7 @@ export default function UserUpload() {
                                             id="file-upload"
                                             className="hidden"
                                             onChange={onFileSelect}
-                                            accept=".csv,.json,.parquet,.txt,.pdf"
+                                            accept=".csv,.json,.txt,.pdf,.png,.jpg,.jpeg,.bmp,.tiff,.tif,.webp,.sql,.docx"
                                         />
                                         <label
                                             htmlFor="file-upload"

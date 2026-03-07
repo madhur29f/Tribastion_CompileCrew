@@ -22,7 +22,7 @@ import UserDashboard from "./pages/UserDashboard";
 import NotFound from "./pages/NotFound";
 import AdminSettings from "./pages/AdminSettings";
 import UserDownloads from "./pages/UserDownloads";
-import UserSearch from "./pages/UserSearch";
+
 import UserSettings from "./pages/UserSettings";
 import UserUpload from "./pages/UserUpload";
 
@@ -130,14 +130,7 @@ const AppComponent = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/user/search"
-              element={
-                <ProtectedRoute requiredRole="Standard">
-                  <UserSearch />
-                </ProtectedRoute>
-              }
-            />
+
             <Route
               path="/user/settings"
               element={

@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
-import { TrendingUp, ShieldAlert, Users, Download, FileText, Zap } from "lucide-react";
+import { ShieldAlert, Users, FileText, Zap, Upload, FileSearch } from "lucide-react";
 import { AdminLayout } from "@/components/AdminLayout";
-import { dashboardAPI } from "@/lib/api";
+import { dashboardAPI, logsAPI } from "@/lib/api";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 interface StatCard {
   label: string;
   value: number | string;
   icon: React.ReactNode;
-  trend?: number;
   color: "blue" | "red" | "purple" | "green";
 }
 
@@ -27,7 +27,7 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
 };
 
-const StatCard = ({ label, value, icon, trend, color }: StatCard) => {
+const StatCard = ({ label, value, icon, color }: StatCard) => {
   const bgColors = {
     blue: "bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-200/50 dark:border-blue-800/50",
     red: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 border-red-200/50 dark:border-red-800/50",
@@ -66,12 +66,6 @@ const StatCard = ({ label, value, icon, trend, color }: StatCard) => {
               </motion.span>
             )}
           </p>
-          {trend !== undefined && (
-            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1 font-medium z-10">
-              <TrendingUp className="w-3 h-3 text-primary" />
-              <span className="text-primary font-bold">+{trend}%</span> vs last month
-            </p>
-          )}
         </div>
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${bgColors[color].split(" ").slice(0, 3).join(" ")} shadow-inner`}>
           {icon}
@@ -81,41 +75,46 @@ const StatCard = ({ label, value, icon, trend, color }: StatCard) => {
   );
 };
 
+interface AuditActivity {
+  id: number;
+  user: string;
+  action: string;
+  file?: string;
+  time: string;
+  type: "success" | "warning" | "info";
+}
+
 const RecentActivity = () => {
-  const activities = [
-    {
-      id: 1,
-      user: "admin1",
-      action: "File Upload",
-      file: "customer_database.sql",
-      time: "3/5/2026, 4:00 PM",
-      type: "success",
-    },
-    {
-      id: 2,
-      user: "System",
-      action: "PII Detection",
-      file: "customer_database.sql",
-      time: "3/5/2026, 4:05 PM",
-      type: "warning", // Changed to warning for visual variety
-    },
-    {
-      id: 3,
-      user: "john_doe",
-      action: "File Download",
-      file: "user_records_sanitized.csv",
-      time: "3/4/2026, 4:00 PM",
-      type: "success",
-    },
-    {
-      id: 4,
-      user: "john_doe",
-      action: "User Login",
-      file: undefined,
-      time: "3/4/2026, 4:00 PM",
-      type: "info",
-    },
-  ];
+  const [activities, setActivities] = useState<AuditActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const data = await logsAPI.getLogs();
+        // Take the most recent 6 entries
+        const recent = data.slice(0, 6).map((log: any, i: number) => ({
+          id: i + 1,
+          user: log.user,
+          action: log.action,
+          file: log.file || undefined,
+          time: new Date(log.timestamp).toLocaleString("en-US", {
+            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+          }),
+          type: log.action === "PII Detection" || log.action === "DPDP_High_Risk_Alert"
+            ? "warning" as const
+            : log.action === "User Login"
+              ? "info" as const
+              : "success" as const,
+        }));
+        setActivities(recent);
+      } catch (error) {
+        console.error("Failed to fetch recent activity:", error);
+      }
+      setLoading(false);
+    };
+    fetchLogs();
+  }, []);
 
   return (
     <motion.div variants={itemVariants} className="glass-card h-full">
@@ -124,71 +123,43 @@ const RecentActivity = () => {
           <Zap className="w-5 h-5 text-accent" />
           Recent Activity
         </h3>
-        <button className="text-xs font-semibold text-primary hover:text-primary/80 uppercase tracking-widest transition-colors">
-          View All Logging
-        </button>
       </div>
-      <div className="space-y-1">
-        {activities.map((activity, index) => (
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.1 + 0.5 }}
-            key={activity.id}
-            className="flex items-start gap-4 p-3 hover:bg-white/5 dark:hover:bg-white/5 rounded-xl transition-all cursor-pointer border border-transparent hover:border-white/10 dark:hover:border-white/10"
-          >
-            <div
-              className={`w-3 h-3 rounded-full mt-1.5 flex-shrink-0 shadow-[0_0_10px_currentColor] ${activity.type === "success" ? "bg-primary text-primary" :
-                activity.type === "warning" ? "bg-yellow-500 text-yellow-500" :
-                  "bg-accent text-accent"
-                }`}
-            />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-foreground text-sm">{activity.user}</span>
-                <span className={`badge-${activity.type}`}>{activity.action}</span>
-                {activity.file && <span className="text-xs text-muted-foreground font-mono">{activity.file}</span>}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1.5 font-medium">{activity.time}</p>
-            </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} className="text-muted-foreground font-bold">
+            Loading audit trail...
           </motion.div>
-        ))}
-      </div>
-    </motion.div>
-  );
-};
-
-const ProcessingStatus = () => {
-  return (
-    <motion.div variants={itemVariants} className="glass-card">
-      <h3 className="text-lg font-bold text-foreground mb-6 flex items-center gap-2">
-        <ShieldAlert className="w-5 h-5 text-primary" />
-        Processing Pipeline Status
-      </h3>
-      <div className="space-y-6">
-        {["Scanning for PII", "Applying NLP Models", "Redacting Data", "Finalizing Generation"].map((step, i) => (
-          <div key={i}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-foreground">{step}</span>
-              <span className="text-xs font-bold text-primary font-mono">{(i + 1) * 25}%</span>
-            </div>
-            <div className="h-2 bg-secondary/50 rounded-full overflow-hidden border border-white/5 shadow-inner">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${(i + 1) * 25}%` }}
-                transition={{ duration: 1.5, delay: 0.5 + i * 0.2 }}
-                className="h-full bg-gradient-to-r from-primary via-accent to-primary relative"
-              >
-                <motion.div
-                  animate={{ x: ["-100%", "200%"] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                  className="absolute top-0 left-0 bottom-0 w-20 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-12"
-                />
-              </motion.div>
-            </div>
-          </div>
-        ))}
-      </div>
+        </div>
+      ) : activities.length === 0 ? (
+        <p className="text-muted-foreground text-sm text-center py-8">No recent activity recorded.</p>
+      ) : (
+        <div className="space-y-1">
+          {activities.map((activity, index) => (
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.1 + 0.3 }}
+              key={activity.id}
+              className="flex items-start gap-4 p-3 hover:bg-white/5 dark:hover:bg-white/5 rounded-xl transition-all border border-transparent hover:border-white/10 dark:hover:border-white/10"
+            >
+              <div
+                className={`w-3 h-3 rounded-full mt-1.5 flex-shrink-0 shadow-[0_0_10px_currentColor] ${activity.type === "success" ? "bg-primary text-primary" :
+                  activity.type === "warning" ? "bg-yellow-500 text-yellow-500" :
+                    "bg-accent text-accent"
+                  }`}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-foreground text-sm">{activity.user}</span>
+                  <span className={`badge-${activity.type}`}>{activity.action}</span>
+                  {activity.file && <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{activity.file}</span>}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5 font-medium">{activity.time}</p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 };
@@ -201,6 +172,7 @@ export default function AdminDashboard() {
     sanitizedDownloads: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -249,28 +221,24 @@ export default function AdminDashboard() {
             label="Total Files Secured"
             value={isLoading ? "-" : stats.totalFiles}
             icon={<FileText className="w-8 h-8" />}
-            trend={12}
             color="blue"
           />
           <StatCard
             label="PII Threats Detected"
             value={isLoading ? "-" : stats.piiDetected}
             icon={<ShieldAlert className="w-8 h-8" />}
-            trend={8}
             color="red"
           />
           <StatCard
-            label="Active Connections"
+            label="Active Users"
             value={isLoading ? "-" : stats.activeUsers}
             icon={<Users className="w-8 h-8" />}
-            trend={2}
             color="purple"
           />
           <StatCard
-            label="Sanitized Exports"
+            label="Sanitized Downloads"
             value={isLoading ? "-" : stats.sanitizedDownloads}
-            icon={<Download className="w-8 h-8" />}
-            trend={23}
+            icon={<FileText className="w-8 h-8" />}
             color="green"
           />
         </div>
@@ -284,41 +252,24 @@ export default function AdminDashboard() {
 
           {/* Right Column */}
           <div className="space-y-6">
-            <ProcessingStatus />
-
-            <motion.div variants={itemVariants} className="glass-card border-l-4 border-l-accent relative overflow-hidden group">
-              <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-accent/10 rounded-full blur-xl group-hover:bg-accent/20 transition-colors" />
-              <div className="flex items-start gap-4 relative z-10">
-                <div className="p-2 bg-accent/20 rounded-lg">
-                  <Zap className="w-5 h-5 text-accent flex-shrink-0" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-foreground mb-2">Advanced Security Engine</h3>
-                  <ul className="text-sm text-muted-foreground space-y-2.5 font-medium">
-                    <li className="flex items-center gap-2 hover:text-foreground transition-colors"><span className="text-accent">•</span> ML-powered NLP detection</li>
-                    <li className="flex items-center gap-2 hover:text-foreground transition-colors"><span className="text-accent">•</span> Context-aware redaction</li>
-                    <li className="flex items-center gap-2 hover:text-foreground transition-colors"><span className="text-accent">•</span> Zero-trust access control</li>
-                  </ul>
-                </div>
-              </div>
-            </motion.div>
-
             <motion.div variants={itemVariants} className="glass-card">
               <h3 className="text-sm font-bold text-foreground mb-4 uppercase tracking-wider">Quick Actions</h3>
               <div className="space-y-3">
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  className="w-full px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-bold text-sm shadow-[0_4px_14px_0_rgba(20,184,166,0.39)] transition-all"
+                  onClick={() => navigate("/admin/upload")}
+                  className="w-full px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-bold text-sm shadow-[0_4px_14px_0_rgba(20,184,166,0.39)] transition-all flex items-center justify-center gap-2"
                 >
-                  Initiate Secure Upload
+                  <Upload className="w-4 h-4" /> Initiate Secure Upload
                 </motion.button>
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  className="w-full px-4 py-3 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-xl font-bold text-sm shadow-sm transition-all border border-border"
+                  onClick={() => navigate("/admin/logs")}
+                  className="w-full px-4 py-3 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-xl font-bold text-sm shadow-sm transition-all border border-border flex items-center justify-center gap-2"
                 >
-                  Access Audit Logs
+                  <FileSearch className="w-4 h-4" /> Access Audit Logs
                 </motion.button>
               </div>
             </motion.div>
